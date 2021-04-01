@@ -96,7 +96,7 @@ def blocksparse_attention_impl(q, k, v, heads, attn_mode, local_attn_ctx=None,
         q = strided_transpose(q, n_ctx, local_attn_ctx, blocksize)
         k = strided_transpose(k, n_ctx, local_attn_ctx, blocksize)
         v = strided_transpose(v, n_ctx, local_attn_ctx, blocksize)
-    n_state = shape_list(q)[-1] // heads
+    n_state = shape_list(q)[-1] // heads # get shape, feature // heads -> head-split embed 
     bst = get_blocksparse_obj(n_ctx, heads, attn_mode, blocksize, local_attn_ctx, num_verts, vertsize)
     scale_amount = tf.cast(1.0 / np.sqrt(n_state), tf.float32)
     w = bst.query_key_op(q, k)
@@ -114,7 +114,7 @@ def blocksparse_attention_impl(q, k, v, heads, attn_mode, local_attn_ctx=None,
 def get_blocksparse_obj(n_ctx, n_heads, attn_mode, blocksize=32, local_attn_ctx=None, num_verts=4, vertsize=1):
     '''Defines the block-level sparsity pattern in the attention matrix. Enabled blocks
     will have the callback called on them in order to define a positionwise sparsity mask.'''
-    n_bctx = n_ctx // blocksize
+    n_bctx = n_ctx // blocksize # n_ctx : max seq len, n_bctx then is block nums 
     layout = np.ones([n_bctx, n_bctx], dtype=np.bool)
     extra_diagonals = None
     block_chunks = None
@@ -125,7 +125,7 @@ def get_blocksparse_obj(n_ctx, n_heads, attn_mode, blocksize=32, local_attn_ctx=
         assert local_attn_ctx % blocksize == 0
         extra_diagonals = local_attn_ctx // blocksize
     elif attn_mode == 'strided':
-        bT_ctx = n_ctx // local_attn_ctx
+        bT_ctx = n_ctx // local_attn_ctx # for n_ctx = 1024, bT_ctx = 32 
         assert bT_ctx % blocksize == 0
         block_chunks = bT_ctx // blocksize
     else:
@@ -166,6 +166,7 @@ def get_blocksparse_obj(n_ctx, n_heads, attn_mode, blocksize=32, local_attn_ctx=
                 layouts.append(layout)
             layout = np.array(layouts)
     else:
+        # strided atten 
         for q_idx, k_idx in np.ndindex(n_bctx, n_bctx):
             if k_idx > q_idx:
                 layout[q_idx, k_idx] = 0
